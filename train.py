@@ -11,8 +11,8 @@ import time
 
 import torch
 import torch.optim as optim
-from tensorboardX import SummaryWriter
-
+# from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 # set config
 parser = custom.get_argument_parser()

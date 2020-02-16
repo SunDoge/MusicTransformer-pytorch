@@ -44,6 +44,11 @@ $ git clone https://github.com/jason9693/midi-neural-processor.git
 $ mv midi-neural-processor midi_processor
 ```
 
+```bash
+git clone https://github.com/gudgud96/midi-neural-processor.git
+mv midi-neural-processor midi_processor
+rm -rf midi_processor/.git
+```
 
 
 ## Midi Download	
