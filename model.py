@@ -1,6 +1,7 @@
-from custom.layers import *
-from custom.criterion import *
-from custom.layers import Encoder
+# from custom.layers import *
+# from custom.criterion import *
+# from custom.layers import Encoder
+from custom.hd_layers import Encoder
 from custom.config import config
 
 import sys

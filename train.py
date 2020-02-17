@@ -81,8 +81,8 @@ for e in range(config.epochs):
         scheduler.optimizer.zero_grad()
         try:
             batch_x, batch_y = dataset.slide_seq2seq_batch(config.batch_size, config.max_seq)
-            batch_x = torch.from_numpy(batch_x).contiguous().to(config.device, non_blocking=True, dtype=torch.int)
-            batch_y = torch.from_numpy(batch_y).contiguous().to(config.device, non_blocking=True, dtype=torch.int)
+            batch_x = torch.from_numpy(batch_x).contiguous().to(config.device, non_blocking=True, dtype=torch.long)
+            batch_y = torch.from_numpy(batch_y).contiguous().to(config.device, non_blocking=True, dtype=torch.long)
         except IndexError:
             continue
 
@@ -107,8 +107,8 @@ for e in range(config.epochs):
         if b % 100 == 0:
             single_mt.eval()
             eval_x, eval_y = dataset.slide_seq2seq_batch(2, config.max_seq, 'eval')
-            eval_x = torch.from_numpy(eval_x).contiguous().to(config.device, dtype=torch.int)
-            eval_y = torch.from_numpy(eval_y).contiguous().to(config.device, dtype=torch.int)
+            eval_x = torch.from_numpy(eval_x).contiguous().to(config.device, dtype=torch.long)
+            eval_y = torch.from_numpy(eval_y).contiguous().to(config.device, dtype=torch.long)
 
             eval_preiction, weights = single_mt.forward(eval_x)
 

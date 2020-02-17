@@ -129,7 +129,7 @@ class RelativeGlobalAttention(nn.Module):
 
         out = attention.permute(0, 2, 1, 3)
         # out = torch.reshape(out, (out.size(0), -1, self.d))
-        out = out.view(out.shape[0], -1, self.d)
+        out = out.reshape(out.shape[0], -1, self.d)
 
         out = self.fc(out)
         return out, attention_weights
