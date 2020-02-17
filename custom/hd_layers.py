@@ -268,3 +268,34 @@ class Encoder(torch.nn.Module):
             weights.append(w)
         return x, weights  # (batch_size, input_seq_len, d_model)
 
+
+class Decoder(nn.Module):
+
+    def __init__(self, num_layers, d_model, input_vocab_size,
+                 rate=0.1, max_len=None):
+        super().__init__()
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.embedding = torch.nn.Embedding(input_vocab_size, d_model)
+        if True:
+            self.pos_encoding = DynamicPositionEmbedding(self.d_model, max_seq=max_len)
+        self.dec_layers = [DecoderLayer(d_model, rate, h=self.d_model // 64, additional=False, max_seq=max_len)
+                           for _ in range(num_layers)]
+
+        self.dropout = torch.nn.Dropout(rate)
+
+        self.sqrt_d_model = math.sqrt(self.d_model)
+
+    def forward(self, x, mask, lookup_mask, enc_output=None):
+        weights = []
+        # adding embedding and position encoding.
+        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
+        # x *= math.sqrt(self.d_model)
+        x *= self.sqrt_d_model  # 这步在干嘛？
+        x = self.pos_encoding(x)
+        x = self.dropout(x)
+        for i in range(self.num_layers):
+            x, w1, w2 = self.enc_layers[i](x, enc_output, lookup_mask=lookup_mask, mask=mask, w_out=True)
+            weights.append((w1, w2))
+        return x, weights  # (batch_size, input_seq_len, d_model)
