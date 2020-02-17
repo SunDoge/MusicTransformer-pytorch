@@ -77,7 +77,7 @@ class RelativeGlobalAttention(nn.Module):
 
         # self.E = torch.randn([self.max_seq, int(self.dh)], requires_grad=False)
         E = torch.randn([self.max_seq, self.dh])  # 这个是什么？为什么不是全0？
-        self.E = nn.Parameter(E)
+        self.E = nn.Parameter(E)  # 这个地方理论上是可学习的参数
 
         if self.additional:
             self.Radd = None
@@ -165,4 +165,106 @@ class RelativeGlobalAttention(nn.Module):
         mask = ~mask
         return mask.to(qe.dtype) * qe
 
+
+class EncoderLayer(torch.nn.Module):
+    def __init__(self, d_model, rate=0.1, h=16, additional=False, max_seq=2048):
+        super(EncoderLayer, self).__init__()
+
+        self.d_model = d_model
+        self.rga = RelativeGlobalAttention(h=h, d=d_model, max_seq=max_seq, add_emb=additional)
+
+        self.FFN_pre = torch.nn.Linear(self.d_model, self.d_model // 2)
+        self.FFN_suf = torch.nn.Linear(self.d_model // 2, self.d_model)
+
+        self.layernorm1 = torch.nn.LayerNorm(self.d_model, eps=1e-6)
+        self.layernorm2 = torch.nn.LayerNorm(self.d_model, eps=1e-6)
+
+        self.dropout1 = torch.nn.Dropout(rate)
+        self.dropout2 = torch.nn.Dropout(rate)
+
+    def forward(self, x, mask=None, **kwargs):
+        attn_out, w = self.rga([x, x, x], mask)
+        attn_out = self.dropout1(attn_out)
+        out1 = self.layernorm1(attn_out + x)
+
+        ffn_out = F.relu(self.FFN_pre(out1), inplace=True)
+        ffn_out = self.FFN_suf(ffn_out)
+        ffn_out = self.dropout2(ffn_out)
+        out2 = self.layernorm2(out1 + ffn_out)
+        return out2, w
+
+
+class DecoderLayer(torch.nn.Module):
+    def __init__(self, d_model, rate=0.1, h=16, additional=False, max_seq=2048):
+        super(DecoderLayer, self).__init__()
+
+        self.d_model = d_model
+        self.rga2 = RelativeGlobalAttention(d=d_model, h=h, max_seq=max_seq, add_emb=additional)
+        self.rga = RelativeGlobalAttention(d=d_model, h=h, max_seq=max_seq, add_emb=additional)
+
+        self.FFN_pre = torch.nn.Linear(self.d_model, self.d_model // 2)
+        self.FFN_suf = torch.nn.Linear(self.d_model // 2, self.d_model)
+
+        self.layernorm1 = torch.nn.LayerNorm(self.d_model, eps=1e-6)
+        self.layernorm2 = torch.nn.LayerNorm(self.d_model, eps=1e-6)
+        self.layernorm3 = torch.nn.LayerNorm(self.d_model, eps=1e-6)
+
+        self.dropout1 = torch.nn.Dropout(rate)
+        self.dropout2 = torch.nn.Dropout(rate)
+        self.dropout3 = torch.nn.Dropout(rate)
+
+    def forward(self, x, encode_out, mask=None, lookup_mask=None, w_out=False, **kwargs):
+
+        attn_out, aw1 = self.rga([x, x, x], mask=lookup_mask)
+        attn_out = self.dropout1(attn_out)
+        out1 = self.layernorm1(attn_out + x)
+
+        if encode_out is None:
+            attn_out2, aw2 = self.rga2([out1, out1, out1], mask=mask)
+        else:
+            attn_out2, aw2 = self.rga2([out1, encode_out, encode_out], mask=mask)
+        attn_out2 = self.dropout2(attn_out2)
+        attn_out2 = self.layernorm2(out1 + attn_out2)
+
+        ffn_out = F.relu(self.FFN_pre(attn_out2), inplace=True)
+        ffn_out = self.FFN_suf(ffn_out)
+        ffn_out = self.dropout3(ffn_out)
+        out = self.layernorm3(attn_out2 + ffn_out)
+
+        if w_out:
+            return out, aw1, aw2
+        else:
+            return out
+
+
+class Encoder(torch.nn.Module):
+    def __init__(self, num_layers, d_model, input_vocab_size, rate=0.1, max_len=None):
+        super(Encoder, self).__init__()
+
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.embedding = torch.nn.Embedding(input_vocab_size, d_model)
+        if True:
+            self.pos_encoding = DynamicPositionEmbedding(self.d_model, max_seq=max_len)
+
+        self.enc_layers = torch.nn.ModuleList(
+            [EncoderLayer(d_model, rate, h=self.d_model // 64, additional=False, max_seq=max_len)
+             for _ in range(num_layers)])
+        self.dropout = torch.nn.Dropout(rate)
+
+        self.sqrt_d_model = math.sqrt(self.d_model)
+
+    def forward(self, x, mask=None):
+        weights = []
+        # adding embedding and position encoding.
+        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
+        # x *= math.sqrt(self.d_model)
+        x *= self.sqrt_d_model  # 这步在干嘛？
+        x = self.pos_encoding(x)
+        x = self.dropout(x)
+        for i in range(self.num_layers):
+            x, w = self.enc_layers[i](x, mask)
+            weights.append(w)
+        return x, weights  # (batch_size, input_seq_len, d_model)
 
